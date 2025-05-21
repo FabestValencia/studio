@@ -1,8 +1,9 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useInventory } from '@/lib/inventory-store';
 import type { InventoryItem } from '@/types/inventory';
@@ -11,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
-import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus } from 'lucide-react';
+import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus, AlertTriangleIcon } from 'lucide-react';
 import { DeleteItemDialog } from './delete-item-dialog';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -22,11 +23,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from "@/components/ui/badge";
 
 type SortKey = keyof InventoryItem | '';
 type SortDirection = 'asc' | 'desc';
 
-const ALL_CATEGORIES_VALUE = "all_qmd_categories_filter_value"; // Unique non-empty value
+const ALL_CATEGORIES_VALUE = "all_qmd_categories_filter_value";
 
 export function InventoryListClient() {
   const { items, deleteItem, isInitialized } = useInventory();
@@ -34,7 +36,7 @@ export function InventoryListClient() {
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>(''); // Empty string means all categories
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES_VALUE);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -57,7 +59,7 @@ export function InventoryListClient() {
       );
     }
 
-    if (categoryFilter) { // if categoryFilter is not an empty string
+    if (categoryFilter && categoryFilter !== ALL_CATEGORIES_VALUE) {
       processedItems = processedItems.filter(item => item.category === categoryFilter);
     }
 
@@ -74,12 +76,9 @@ export function InventoryListClient() {
         } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
           comparison = valA === valB ? 0 : (valA ? -1 : 1);
         }
-        // For date strings, convert to Date objects for comparison
         else if (sortKey === 'dateAdded' || sortKey === 'lastUpdated') {
            comparison = new Date(valA as string).getTime() - new Date(valB as string).getTime();
         }
-
-
         return sortDirection === 'asc' ? comparison : -comparison;
       });
     }
@@ -104,7 +103,7 @@ export function InventoryListClient() {
       deleteItem(itemToDelete.id);
       toast({ title: "Artículo Eliminado", description: `El artículo "${itemToDelete.name}" ha sido eliminado.` });
       setItemToDelete(null);
-      router.refresh(); // Refresh to reflect changes if any server-side data source were used
+      router.refresh(); 
     }
   };
   
@@ -114,6 +113,12 @@ export function InventoryListClient() {
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-2 h-4 w-4"><path d="m18 15-6-6-6 6"/></svg> :
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-2 h-4 w-4"><path d="m6 9 6 6 6-6"/></svg>;
   };
+
+  const getImageDataAiHint = (item: InventoryItem): string => {
+    if (item.category) return item.category.split(' ')[0].toLowerCase();
+    if (item.name) return item.name.split(' ')[0].toLowerCase();
+    return 'product package';
+  }
 
   if (!isInitialized) {
     return (
@@ -125,6 +130,7 @@ export function InventoryListClient() {
           </div>
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex items-center space-x-4 p-4 border-b">
+              <Skeleton className="h-10 w-10" /> {/* For Image */}
               <Skeleton className="h-6 w-1/4" />
               <Skeleton className="h-6 w-1/3" />
               <Skeleton className="h-6 w-1/6" />
@@ -136,7 +142,6 @@ export function InventoryListClient() {
       </Card>
     );
   }
-
 
   return (
     <Card className="shadow-lg">
@@ -154,10 +159,8 @@ export function InventoryListClient() {
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <Select 
-              value={categoryFilter === '' ? ALL_CATEGORIES_VALUE : categoryFilter} 
-              onValueChange={(value) => {
-                setCategoryFilter(value === ALL_CATEGORIES_VALUE ? '' : value);
-              }}
+              value={categoryFilter} 
+              onValueChange={setCategoryFilter}
             >
               <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -196,6 +199,7 @@ export function InventoryListClient() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]">Imagen</TableHead>
                   <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('name')}>
                     <div className="flex items-center">Nombre {renderSortIcon('name')}</div>
                   </TableHead>
@@ -215,7 +219,35 @@ export function InventoryListClient() {
               <TableBody>
                 {filteredAndSortedItems.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>
+                      <Image
+                        src={item.imageUrl || `https://placehold.co/40x40.png`}
+                        alt={item.name}
+                        width={40}
+                        height={40}
+                        className="rounded"
+                        data-ai-hint={getImageDataAiHint(item)}
+                        onError={(e) => { (e.target as HTMLImageElement).src = `https://placehold.co/40x40.png`; }}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {item.name}
+                      {typeof item.lowStockThreshold === 'number' && item.quantity < item.lowStockThreshold && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="destructive" className="ml-2 cursor-default">
+                                <AlertTriangleIcon className="h-3 w-3 mr-1" />
+                                Bajo Stock
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Cantidad ({item.quantity}) está por debajo del umbral ({item.lowStockThreshold}).</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </TableCell>
                     <TableCell className="hidden md:table-cell max-w-xs truncate">{item.description || '-'}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell className="hidden sm:table-cell">{item.category || '-'}</TableCell>
@@ -258,4 +290,3 @@ export function InventoryListClient() {
     </Card>
   );
 }
-

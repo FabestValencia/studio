@@ -29,7 +29,6 @@ export function useInventory() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Initialize state from localStorage only on the client-side after mount
     setItems(getStoredItems());
     setIsInitialized(true);
   }, []);
@@ -49,6 +48,8 @@ export function useInventory() {
       category: itemData.category || '',
       dateAdded: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
+      imageUrl: itemData.imageUrl || '',
+      lowStockThreshold: itemData.lowStockThreshold ? Number(itemData.lowStockThreshold) : undefined,
     };
     setItems((prevItems) => [...prevItems, newItem]);
     return newItem;
@@ -66,6 +67,8 @@ export function useInventory() {
             quantity: Number(updatedData.quantity),
             category: updatedData.category || '',
             lastUpdated: new Date().toISOString(),
+            imageUrl: updatedData.imageUrl || '',
+            lowStockThreshold: updatedData.lowStockThreshold ? Number(updatedData.lowStockThreshold) : undefined,
           };
           return resultItem;
         }
@@ -80,7 +83,6 @@ export function useInventory() {
   }, []);
 
   const getItemById = useCallback((id: string): InventoryItem | undefined => {
-    // This ensures items are read after initialization
     if (!isInitialized) return undefined; 
     return items.find((item) => item.id === id);
   }, [items, isInitialized]);

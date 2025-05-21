@@ -7,10 +7,9 @@ import { List, PackagePlus, LayoutDashboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/inventario', label: 'Inventario', icon: List },
   { href: '/inventario/nuevo', label: 'Añadir Artículo', icon: PackagePlus },
-  // Add more items here if needed
-  // { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 ];
 
 export function SidebarNav() {
@@ -19,14 +18,18 @@ export function SidebarNav() {
   return (
     <SidebarMenu>
       {navItems.map((item) => {
-        const isActive = pathname === item.href || (item.href !== '/inventario' && pathname.startsWith(item.href));
+        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href) && item.href !== '/inventario' && item.href !== '/dashboard');
+        // More specific active state for top-level items
+        const isTopLevelActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/');
+
+
         return (
           <SidebarMenuItem key={item.label}>
             <Link href={item.href} passHref legacyBehavior>
               <SidebarMenuButton
-                asChild={false} // Ensure it's a button or an anchor treated like one
-                isActive={isActive}
-                className={cn(isActive && "bg-sidebar-accent text-sidebar-accent-foreground")}
+                asChild={false} 
+                isActive={isTopLevelActive}
+                className={cn(isTopLevelActive && "bg-sidebar-accent text-sidebar-accent-foreground")}
                 tooltip={{ children: item.label, side: "right", align: "center"}}
               >
                 <item.icon className="h-5 w-5" />

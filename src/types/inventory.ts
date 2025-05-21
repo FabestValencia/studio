@@ -6,6 +6,8 @@ export interface InventoryItem {
   category?: string;
   dateAdded: string; // ISO date string
   lastUpdated: string; // ISO date string
+  imageUrl?: string;
+  lowStockThreshold?: number;
 }
 
 export type InventoryItemFormValues = {
@@ -13,4 +15,6 @@ export type InventoryItemFormValues = {
   description: string;
   quantity: number | string; // string from form, number in actual data
   category?: string;
+  imageUrl?: string;
+  lowStockThreshold?: number | string; // string from form, number in actual data
 };
