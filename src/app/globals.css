@@ -47,10 +47,10 @@ body {
     /* Sidebar specific colors */
     --sidebar-background: 210 22% 93%; 
     --sidebar-foreground: 210 25% 22%;
-    --sidebar-primary: 207 88% 68%;
-    --sidebar-primary-foreground: 210 30% 15%;
-    --sidebar-accent: 210 30% 88%;      /* Lighter gray for hover/active items in sidebar */
-    --sidebar-accent-foreground: 207 80% 40%; /* Active item text color - vibrant blue */
+    --sidebar-primary: 207 88% 68%; /* This is var(--primary) */
+    --sidebar-primary-foreground: 210 30% 15%; /* This is var(--primary-foreground) */
+    --sidebar-accent: var(--primary);      /* Use main primary blue for active item background */
+    --sidebar-accent-foreground: var(--primary-foreground); /* Use main primary-foreground for active item text */
     --sidebar-border: 210 20% 85%;
     --sidebar-ring: 207 88% 58%;
   }
@@ -86,10 +86,10 @@ body {
     /* Dark Sidebar */
     --sidebar-background: 210 20% 12%;
     --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 207 80% 60%;
-    --sidebar-primary-foreground: 210 30% 10%;
-    --sidebar-accent: 210 20% 18%;
-    --sidebar-accent-foreground: 207 70% 70%; 
+    --sidebar-primary: 207 80% 60%; /* This is var(--primary) for dark theme */
+    --sidebar-primary-foreground: 210 30% 10%; /* This is var(--primary-foreground) for dark theme */
+    --sidebar-accent: var(--primary); /* Use dark theme primary for active item background */
+    --sidebar-accent-foreground: var(--primary-foreground); /* Use dark theme primary-foreground for active item text */
     --sidebar-border: 210 20% 15%;
     --sidebar-ring: 207 80% 50%;
   }
