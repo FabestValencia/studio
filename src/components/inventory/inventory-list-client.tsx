@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
-import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus, AlertTriangleIcon, MinusCircle, PlusCircle, Download } from 'lucide-react';
+import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus, AlertTriangleIcon, Download } from 'lucide-react';
 import { DeleteItemDialog } from './delete-item-dialog';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -32,12 +32,12 @@ type SortDirection = 'asc' | 'desc';
 const ALL_CATEGORIES_VALUE = "all_qmd_categories_filter_value";
 
 export function InventoryListClient() {
-  const { items, deleteItem, isInitialized, incrementItemQuantity, decrementItemQuantity } = useInventory();
+  const { items, deleteItem, isInitialized } = useInventory();
   const router = useRouter();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>(''); // Empty string for all categories initially
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES_VALUE);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -115,21 +115,6 @@ export function InventoryListClient() {
       deleteItem(itemToDelete.id);
       toast({ title: "Artículo Eliminado", description: `El artículo "${itemToDelete.name}" ha sido eliminado.` });
       setItemToDelete(null);
-    }
-  };
-
-  const handleQuickAdjustQuantity = (itemId: string, type: 'increment' | 'decrement') => {
-    if (type === 'increment') {
-      incrementItemQuantity(itemId);
-      toast({ title: "Cantidad Actualizada", description: "Se incrementó la cantidad del artículo." });
-    } else {
-      const item = items.find(i => i.id === itemId);
-      if (item && item.quantity > 0) {
-        decrementItemQuantity(itemId);
-        toast({ title: "Cantidad Actualizada", description: "Se decrementó la cantidad del artículo." });
-      } else if (item && item.quantity === 0) {
-        toast({ title: "No se puede decrementar", description: "La cantidad ya es cero.", variant: "destructive" });
-      }
     }
   };
 
@@ -226,8 +211,8 @@ export function InventoryListClient() {
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <Select 
-              value={categoryFilter || ALL_CATEGORIES_VALUE} 
-              onValueChange={(value) => setCategoryFilter(value === ALL_CATEGORIES_VALUE ? '' : value)}
+              value={categoryFilter} 
+              onValueChange={(value) => setCategoryFilter(value)}
             >
               <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -283,7 +268,7 @@ export function InventoryListClient() {
                     <div className="flex items-center">Nombre {renderSortIcon('name')}</div>
                   </TableHead>
                   <TableHead className="hidden md:table-cell min-w-[200px]">Descripción</TableHead>
-                  <TableHead className="cursor-pointer hover:bg-muted/50 min-w-[120px] text-center" onClick={() => handleSort('quantity')}>
+                  <TableHead className="cursor-pointer hover:bg-muted/50 min-w-[100px] text-center" onClick={() => handleSort('quantity')}>
                      <div className="flex items-center justify-center">Cantidad {renderSortIcon('quantity')}</div>
                   </TableHead>
                    <TableHead className="hidden sm:table-cell cursor-pointer hover:bg-muted/50 min-w-[100px]" onClick={() => handleSort('price')}>
@@ -321,15 +306,7 @@ export function InventoryListClient() {
                     </TableCell>
                     <TableCell className="hidden md:table-cell max-w-xs truncate" title={item.description}>{item.description || '-'}</TableCell>
                     <TableCell className="text-center">
-                      <div className="flex items-center justify-center space-x-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleQuickAdjustQuantity(item.id, 'decrement')} disabled={item.quantity === 0}>
-                          <MinusCircle className="h-4 w-4" />
-                        </Button>
-                        <span>{item.quantity}</span>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleQuickAdjustQuantity(item.id, 'increment')}>
-                          <PlusCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      {item.quantity}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       {item.price !== undefined ? `$${item.price.toFixed(2)}` : '-'}
@@ -376,3 +353,5 @@ export function InventoryListClient() {
     </Card>
   );
 }
+
+    
