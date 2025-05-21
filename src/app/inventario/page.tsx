@@ -18,8 +18,8 @@ export default function InventoryPage() {
             Gestiona los artículos de tu inventario.
           </p>
         </div>
-        <Link href="/inventario/nuevo" passHref>
-          <Button>
+        <Link href="/inventario/nuevo" passHref className="invisible">
+          <Button tabIndex={-1}>
             <PackagePlus className="mr-2 h-4 w-4" />
             Añadir Nuevo Artículo
           </Button>
