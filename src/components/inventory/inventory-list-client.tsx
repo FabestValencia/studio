@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -25,13 +26,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 type SortKey = keyof InventoryItem | '';
 type SortDirection = 'asc' | 'desc';
 
+const ALL_CATEGORIES_VALUE = "all_qmd_categories_filter_value"; // Unique non-empty value
+
 export function InventoryListClient() {
   const { items, deleteItem, isInitialized } = useInventory();
   const router = useRouter();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>(''); // Empty string means all categories
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -54,7 +57,7 @@ export function InventoryListClient() {
       );
     }
 
-    if (categoryFilter) {
+    if (categoryFilter) { // if categoryFilter is not an empty string
       processedItems = processedItems.filter(item => item.category === categoryFilter);
     }
 
@@ -150,13 +153,18 @@ export function InventoryListClient() {
             />
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <Select 
+              value={categoryFilter === '' ? ALL_CATEGORIES_VALUE : categoryFilter} 
+              onValueChange={(value) => {
+                setCategoryFilter(value === ALL_CATEGORIES_VALUE ? '' : value);
+              }}
+            >
               <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Filtrar por categoría" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas las categorías</SelectItem>
+                <SelectItem value={ALL_CATEGORIES_VALUE}>Todas las categorías</SelectItem>
                 {uniqueCategories.map(category => (
                   <SelectItem key={category} value={category}>{category}</SelectItem>
                 ))}
@@ -250,3 +258,4 @@ export function InventoryListClient() {
     </Card>
   );
 }
+
