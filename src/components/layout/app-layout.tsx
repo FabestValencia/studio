@@ -7,14 +7,14 @@ import {
   Sidebar,
   SidebarHeader,
   SidebarContent,
-  SidebarFooter,
+  // SidebarFooter, // Removed
   SidebarInset,
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Button } from '@/components/ui/button';
+// import { Button } from '@/components/ui/button'; // No longer needed here
 import { SidebarNav } from './sidebar-nav';
-import { Package, Settings } from 'lucide-react'; // Settings icon as placeholder
+import { Package } from 'lucide-react'; // Settings icon removed
 
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -29,13 +29,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <SidebarContent className="p-2">
           <SidebarNav />
         </SidebarContent>
-        <SidebarFooter className="p-2">
-          {/* Placeholder for potential footer items like settings or user profile */}
-           <Button variant="ghost" className="w-full justify-start group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:p-2">
-            <Settings className="mr-2 group-data-[collapsible=icon]:mr-0" />
-            <span className="group-data-[collapsible=icon]:hidden">Ajustes</span>
-          </Button>
-        </SidebarFooter>
+        {/* SidebarFooter and its content removed */}
       </Sidebar>
       <SidebarInset>
         <PageHeader />
