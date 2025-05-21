@@ -1,3 +1,4 @@
+
 import type { InventoryItem, InventoryItemFormValues } from '@/types/inventory';
 import { useState, useEffect, useCallback } from 'react';
 
@@ -45,10 +46,10 @@ export function useInventory() {
       name: itemData.name,
       description: itemData.description || '',
       quantity: Number(itemData.quantity),
+      price: itemData.price ? Number(itemData.price) : undefined,
       category: itemData.category || '',
       dateAdded: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
-      imageUrl: itemData.imageUrl || '',
       lowStockThreshold: itemData.lowStockThreshold ? Number(itemData.lowStockThreshold) : undefined,
     };
     setItems((prevItems) => [...prevItems, newItem]);
@@ -65,9 +66,9 @@ export function useInventory() {
             name: updatedData.name,
             description: updatedData.description || '',
             quantity: Number(updatedData.quantity),
+            price: updatedData.price ? Number(updatedData.price) : undefined,
             category: updatedData.category || '',
             lastUpdated: new Date().toISOString(),
-            imageUrl: updatedData.imageUrl || '',
             lowStockThreshold: updatedData.lowStockThreshold ? Number(updatedData.lowStockThreshold) : undefined,
           };
           return resultItem;
@@ -87,6 +88,22 @@ export function useInventory() {
     return items.find((item) => item.id === id);
   }, [items, isInitialized]);
 
+  const incrementItemQuantity = useCallback((id: string, amount: number = 1) => {
+    setItems((prevItems) =>
+      prevItems.map((item) =>
+        item.id === id ? { ...item, quantity: item.quantity + amount, lastUpdated: new Date().toISOString() } : item
+      )
+    );
+  }, []);
+
+  const decrementItemQuantity = useCallback((id: string, amount: number = 1) => {
+    setItems((prevItems) =>
+      prevItems.map((item) =>
+        item.id === id ? { ...item, quantity: Math.max(0, item.quantity - amount), lastUpdated: new Date().toISOString() } : item
+      )
+    );
+  }, []);
+
   return {
     items: isInitialized ? items : [],
     isInitialized,
@@ -94,5 +111,7 @@ export function useInventory() {
     updateItem,
     deleteItem,
     getItemById,
+    incrementItemQuantity,
+    decrementItemQuantity,
   };
 }

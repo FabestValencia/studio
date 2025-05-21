@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { SubmitHandler } from 'react-hook-form';
@@ -14,9 +15,10 @@ import type { InventoryItem, InventoryItemFormValues } from '@/types/inventory';
 import { useInventory } from '@/lib/inventory-store';
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from 'react';
-import { Sparkles, Lightbulb } from 'lucide-react';
+import { Sparkles, Lightbulb, DollarSign } from 'lucide-react';
 import { generateItemDescription } from '@/ai/flows/generate-item-description-flow';
 import { suggestItemCategory } from '@/ai/flows/suggest-item-category-flow';
+// import { suggestItemPrice } from '@/ai/flows/suggest-item-price-flow'; // Will be added later
 
 interface ItemFormProps {
   item?: InventoryItem; // For editing
@@ -28,6 +30,7 @@ export function ItemForm({ item }: ItemFormProps) {
   const { toast } = useToast();
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   const [isSuggestingCategory, setIsSuggestingCategory] = useState(false);
+  const [isSuggestingPrice, setIsSuggestingPrice] = useState(false); // Added for price suggestion
 
   const form = useForm<InventoryItemFormValues>({
     resolver: zodResolver(inventoryItemSchema),
@@ -36,16 +39,16 @@ export function ItemForm({ item }: ItemFormProps) {
           name: item.name, 
           description: item.description, 
           quantity: item.quantity, 
+          price: item.price,
           category: item.category,
-          imageUrl: item.imageUrl,
           lowStockThreshold: item.lowStockThreshold 
         }
       : { 
           name: '', 
           description: '', 
           quantity: 0, 
+          price: undefined,
           category: '',
-          imageUrl: '',
           lowStockThreshold: 0
         },
   });
@@ -56,8 +59,8 @@ export function ItemForm({ item }: ItemFormProps) {
         name: item.name,
         description: item.description,
         quantity: item.quantity,
+        price: item.price,
         category: item.category,
-        imageUrl: item.imageUrl,
         lowStockThreshold: item.lowStockThreshold,
       });
     }
@@ -72,7 +75,7 @@ export function ItemForm({ item }: ItemFormProps) {
     }
     setIsGeneratingDescription(true);
     try {
-      const result = await generateItemDescription({ itemName, itemCategory: itemCategory || '' });
+      const result = await generateItemDescription({ itemName, itemCategory: itemCategory || undefined });
       form.setValue("description", result.description);
       toast({ title: "Descripción Generada", description: "Se ha generado una descripción para el artículo." });
     } catch (error) {
@@ -92,7 +95,7 @@ export function ItemForm({ item }: ItemFormProps) {
     }
     setIsSuggestingCategory(true);
     try {
-      const result = await suggestItemCategory({ itemName, itemDescription: itemDescription || '' });
+      const result = await suggestItemCategory({ itemName, itemDescription: itemDescription || undefined });
       form.setValue("category", result.suggestedCategory);
       toast({ title: "Categoría Sugerida", description: `Se ha sugerido la categoría: ${result.suggestedCategory}` });
     } catch (error) {
@@ -103,11 +106,34 @@ export function ItemForm({ item }: ItemFormProps) {
     }
   };
 
+  // Placeholder for suggest price - will be implemented if user agrees to new features
+  // const handleSuggestPrice = async () => {
+  //   const itemName = form.getValues("name");
+  //   const itemDescription = form.getValues("description");
+  //   const itemCategory = form.getValues("category");
+  //   if (!itemName) {
+  //     toast({ title: "Nombre Requerido", description: "Por favor, introduce un nombre para el artículo.", variant: "destructive" });
+  //     return;
+  //   }
+  //   setIsSuggestingPrice(true);
+  //   try {
+  //     // const result = await suggestItemPrice({ itemName, itemDescription, itemCategory });
+  //     // form.setValue("price", result.suggestedPrice);
+  //     // toast({ title: "Precio Sugerido", description: `Se ha sugerido un precio: ${result.suggestedPrice}` });
+  //   } catch (error) {
+  //     console.error("Error suggesting price:", error);
+  //     toast({ title: "Error de IA", description: "No se pudo sugerir el precio.", variant: "destructive" });
+  //   } finally {
+  //     setIsSuggestingPrice(false);
+  //   }
+  // };
+
   const onSubmit: SubmitHandler<InventoryItemFormValues> = (data) => {
     try {
       const submittedData = {
         ...data,
         quantity: Number(data.quantity),
+        price: data.price ? Number(data.price) : undefined,
         lowStockThreshold: data.lowStockThreshold ? Number(data.lowStockThreshold) : undefined
       };
 
@@ -192,6 +218,61 @@ export function ItemForm({ item }: ItemFormProps) {
               />
               <FormField
                 control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Precio (Opcional)</FormLabel>
+                     <div className="relative">
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="Ej: 1200.50" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)} className="pl-7"/>
+                      </FormControl>
+                       <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                      {/* <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                        // onClick={handleSuggestPrice}
+                        disabled={isSuggestingPrice || !form.watch("name")}
+                        title="Sugerir precio con IA (Próximamente)"
+                      >
+                        <DollarSign className={`h-4 w-4 ${isSuggestingPrice ? 'animate-pulse' : ''}`} />
+                      </Button> */}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoría (Opcional)</FormLabel>
+                    <div className="relative">
+                      <FormControl>
+                        <Input placeholder="Ej: Electrónicos" {...field} className="pr-12" />
+                      </FormControl>
+                      <Button 
+                        type="button" 
+                        variant="ghost" 
+                        size="icon" 
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                        onClick={handleSuggestCategory}
+                        disabled={isSuggestingCategory || !form.watch("name")}
+                        title="Sugerir categoría con IA"
+                      >
+                        <Lightbulb className={`h-4 w-4 ${isSuggestingCategory ? 'animate-pulse' : ''}`} />
+                      </Button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="lowStockThreshold"
                 render={({ field }) => (
                   <FormItem>
@@ -204,51 +285,13 @@ export function ItemForm({ item }: ItemFormProps) {
                 )}
               />
             </div>
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Categoría (Opcional)</FormLabel>
-                   <div className="relative">
-                    <FormControl>
-                      <Input placeholder="Ej: Electrónicos" {...field} className="pr-12" />
-                    </FormControl>
-                     <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                      onClick={handleSuggestCategory}
-                      disabled={isSuggestingCategory || !form.watch("name")}
-                      title="Sugerir categoría con IA"
-                    >
-                      <Lightbulb className={`h-4 w-4 ${isSuggestingCategory ? 'animate-pulse' : ''}`} />
-                    </Button>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="imageUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>URL de Imagen (Opcional)</FormLabel>
-                  <FormControl>
-                    <Input type="url" placeholder="https://ejemplo.com/imagen.png" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => router.push('/inventario')}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={form.formState.isSubmitting || isGeneratingDescription || isSuggestingCategory}>
+            <Button type="submit" disabled={form.formState.isSubmitting || isGeneratingDescription || isSuggestingCategory || isSuggestingPrice}>
               {form.formState.isSubmitting ? (item ? 'Guardando Cambios...' : 'Añadiendo Artículo...') : (item ? 'Guardar Cambios' : 'Añadir Artículo')}
             </Button>
           </CardFooter>
