@@ -214,7 +214,7 @@ export function InventoryListClient() {
               value={categoryFilter} 
               onValueChange={(value) => setCategoryFilter(value)}
             >
-              <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectTrigger className="w-full sm:w-[240px]"> {/* Increased width from sm:w-[180px] */}
                 <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Filtrar por categoría" />
               </SelectTrigger>
@@ -353,5 +353,7 @@ export function InventoryListClient() {
     </Card>
   );
 }
+
+    
 
     
