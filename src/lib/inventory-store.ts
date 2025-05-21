@@ -134,9 +134,9 @@ export function useInventory() {
     const quantityDifference = newQuantityValue - oldQuantityValue;
 
     if (quantityDifference > 0) {
-      addMovement(updatedItemObject.id, updatedItemObject.name, 'entrada', quantityDifference, 'Ajuste de cantidad (formulario)');
+      addMovement(updatedItemObject.id, updatedItemObject.name, 'entrada', quantityDifference, 'Compra de producto');
     } else if (quantityDifference < 0) {
-      addMovement(updatedItemObject.id, updatedItemObject.name, 'salida', Math.abs(quantityDifference), 'Ajuste de cantidad (formulario)');
+      addMovement(updatedItemObject.id, updatedItemObject.name, 'salida', Math.abs(quantityDifference), 'Venta de producto');
     }
     // If quantityDifference is 0, no movement is logged, which is correct.
 
