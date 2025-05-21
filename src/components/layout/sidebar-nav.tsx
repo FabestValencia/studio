@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -18,18 +19,27 @@ export function SidebarNav() {
   return (
     <SidebarMenu>
       {navItems.map((item) => {
-        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href) && item.href !== '/inventario' && item.href !== '/dashboard');
-        // More specific active state for top-level items
-        const isTopLevelActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/');
+        let itemIsActive = false;
 
+        if (item.href === '/dashboard') {
+          itemIsActive = pathname === item.href;
+        } else if (item.href === '/inventario') {
+          itemIsActive = pathname === item.href || pathname.startsWith('/inventario/editar/');
+        } else if (item.href === '/inventario/nuevo') {
+          itemIsActive = pathname === item.href;
+        }
+        // For other items, the default behavior would be:
+        // else {
+        //  itemIsActive = pathname === item.href;
+        // }
 
         return (
           <SidebarMenuItem key={item.label}>
             <Link href={item.href} passHref legacyBehavior>
               <SidebarMenuButton
                 asChild={false} 
-                isActive={isTopLevelActive}
-                className={cn(isTopLevelActive && "bg-sidebar-accent text-sidebar-accent-foreground")}
+                isActive={itemIsActive}
+                className={cn(itemIsActive && "bg-sidebar-accent text-sidebar-accent-foreground")}
                 tooltip={{ children: item.label, side: "right", align: "center"}}
               >
                 <item.icon className="h-5 w-5" />
