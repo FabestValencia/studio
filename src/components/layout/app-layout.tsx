@@ -23,7 +23,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <SidebarHeader className="p-4 items-center">
           <Link href="/inventario" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
             <Package className="h-7 w-7 text-primary group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8" />
-            <h1 className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">QMD Inventario</h1>
+            <h1 className="text-xl font-semibold text-primary group-data-[collapsible=icon]:hidden">QMD</h1>
           </Link>
         </SidebarHeader>
         <SidebarContent className="p-2">
