@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
-import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter } from 'lucide-react';
+import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus } from 'lucide-react';
 import { DeleteItemDialog } from './delete-item-dialog';
 import { useToast } from "@/hooks/use-toast";
 import {
