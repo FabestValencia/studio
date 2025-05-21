@@ -3,7 +3,6 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
-// import Image from 'next/image'; // Removed Image import
 import { useRouter } from 'next/navigation';
 import { useInventory } from '@/lib/inventory-store';
 import type { InventoryItem } from '@/types/inventory';
@@ -12,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
-import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus, AlertTriangleIcon, MinusCircle, PlusCircle } from 'lucide-react';
+import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus, AlertTriangleIcon, MinusCircle, PlusCircle, Download } from 'lucide-react';
 import { DeleteItemDialog } from './delete-item-dialog';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -27,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
-type SortKey = keyof InventoryItem | 'price' | ''; // Added price for sorting
+type SortKey = keyof InventoryItem | 'price' | '';
 type SortDirection = 'asc' | 'desc';
 
 const ALL_CATEGORIES_VALUE = "all_qmd_categories_filter_value";
@@ -38,7 +37,7 @@ export function InventoryListClient() {
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES_VALUE);
+  const [categoryFilter, setCategoryFilter] = useState<string>(''); // Empty string for all categories initially
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -68,8 +67,15 @@ export function InventoryListClient() {
 
     if (sortKey) {
       processedItems.sort((a, b) => {
-        const valA = a[sortKey as keyof InventoryItem];
-        const valB = b[sortKey as keyof InventoryItem];
+        let valA = a[sortKey as keyof InventoryItem];
+        let valB = b[sortKey as keyof InventoryItem];
+
+        // Handle undefined price for sorting
+        if (sortKey === 'price') {
+            valA = a.price === undefined ? (sortDirection === 'asc' ? Infinity : -Infinity) : a.price;
+            valB = b.price === undefined ? (sortDirection === 'asc' ? Infinity : -Infinity) : b.price;
+        }
+
 
         let comparison = 0;
         if (typeof valA === 'string' && typeof valB === 'string') {
@@ -81,9 +87,9 @@ export function InventoryListClient() {
         } else if (sortKey === 'dateAdded' || sortKey === 'lastUpdated') {
            comparison = new Date(valA as string).getTime() - new Date(valB as string).getTime();
         } else if (valA === undefined && valB !== undefined) {
-          comparison = -1; // undefined comes first
+          comparison = sortDirection === 'asc' ? 1 : -1; 
         } else if (valA !== undefined && valB === undefined) {
-          comparison = 1; // undefined comes first
+          comparison = sortDirection === 'asc' ? -1 : 1;
         }
         return sortDirection === 'asc' ? comparison : -comparison;
       });
@@ -109,7 +115,6 @@ export function InventoryListClient() {
       deleteItem(itemToDelete.id);
       toast({ title: "Artículo Eliminado", description: `El artículo "${itemToDelete.name}" ha sido eliminado.` });
       setItemToDelete(null);
-      // No need for router.refresh() as local state updates will re-render
     }
   };
 
@@ -127,6 +132,51 @@ export function InventoryListClient() {
       }
     }
   };
+
+  const handleExportToCSV = () => {
+    if (filteredAndSortedItems.length === 0) {
+      toast({ title: "No hay datos para exportar", variant: "destructive" });
+      return;
+    }
+
+    const headers = [
+      "ID", "Nombre", "Descripción", "Cantidad", "Precio", 
+      "Categoría", "Fecha de Alta", "Última Actualización", "Umbral Stock Bajo"
+    ];
+    const csvRows = [headers.join(",")];
+
+    filteredAndSortedItems.forEach(item => {
+      const row = [
+        item.id,
+        `"${item.name.replace(/"/g, '""')}"`, // Escape double quotes
+        `"${(item.description || '').replace(/"/g, '""')}"`,
+        item.quantity,
+        item.price !== undefined ? item.price.toFixed(2) : '',
+        `"${(item.category || '').replace(/"/g, '""')}"`,
+        new Date(item.dateAdded).toLocaleString('es-ES'),
+        new Date(item.lastUpdated).toLocaleString('es-ES'),
+        item.lowStockThreshold !== undefined ? item.lowStockThreshold : ''
+      ];
+      csvRows.push(row.join(","));
+    });
+
+    const csvString = csvRows.join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `inventario_qmd_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast({ title: "Exportación Exitosa", description: "El inventario ha sido exportado a CSV." });
+    } else {
+       toast({ title: "Exportación Fallida", description: "Tu navegador no soporta la descarga de archivos.", variant: "destructive" });
+    }
+  };
   
   const renderSortIcon = (key: SortKey) => {
     if (sortKey !== key) return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
@@ -141,11 +191,13 @@ export function InventoryListClient() {
         <CardContent className="p-6">
           <div className="flex justify-between items-center mb-4 gap-4">
             <Skeleton className="h-10 w-1/2 sm:w-1/3" />
-            <Skeleton className="h-10 w-1/2 sm:w-1/4" />
+            <div className="flex gap-2">
+              <Skeleton className="h-10 w-[180px]" />
+              <Skeleton className="h-10 w-10" />
+            </div>
           </div>
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex items-center space-x-4 p-4 border-b">
-              {/* <Skeleton className="h-10 w-10" /> Removed Image Skeleton */}
               <Skeleton className="h-6 w-1/4" />
               <Skeleton className="h-6 w-1/3" />
               <Skeleton className="h-6 w-1/6" />
@@ -174,7 +226,7 @@ export function InventoryListClient() {
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <Select 
-              value={categoryFilter === '' ? ALL_CATEGORIES_VALUE : categoryFilter} 
+              value={categoryFilter || ALL_CATEGORIES_VALUE} 
               onValueChange={(value) => setCategoryFilter(value === ALL_CATEGORIES_VALUE ? '' : value)}
             >
               <SelectTrigger className="w-full sm:w-[180px]">
@@ -188,6 +240,19 @@ export function InventoryListClient() {
                 ))}
               </SelectContent>
             </Select>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={handleExportToCSV} disabled={filteredAndSortedItems.length === 0}>
+                    <Download className="h-4 w-4" />
+                    <span className="sr-only">Exportar a CSV</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Exportar a CSV</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
@@ -214,7 +279,6 @@ export function InventoryListClient() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {/* <TableHead className="w-[50px]">Imagen</TableHead> Removed Image Header */}
                   <TableHead className="cursor-pointer hover:bg-muted/50 min-w-[150px]" onClick={() => handleSort('name')}>
                     <div className="flex items-center">Nombre {renderSortIcon('name')}</div>
                   </TableHead>
@@ -237,17 +301,6 @@ export function InventoryListClient() {
               <TableBody>
                 {filteredAndSortedItems.map((item) => (
                   <TableRow key={item.id}>
-                    {/* <TableCell> Removed Image Cell
-                      <Image
-                        src={item.imageUrl || `https://placehold.co/40x40.png`}
-                        alt={item.name}
-                        width={40}
-                        height={40}
-                        className="rounded"
-                        data-ai-hint={getImageDataAiHint(item)}
-                        onError={(e) => { (e.target as HTMLImageElement).src = `https://placehold.co/40x40.png`; }}
-                      />
-                    </TableCell> */}
                     <TableCell className="font-medium">
                       {item.name}
                       {typeof item.lowStockThreshold === 'number' && item.quantity < item.lowStockThreshold && (

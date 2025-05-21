@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 import { Sparkles, Lightbulb, DollarSign } from 'lucide-react';
 import { generateItemDescription } from '@/ai/flows/generate-item-description-flow';
 import { suggestItemCategory } from '@/ai/flows/suggest-item-category-flow';
-// import { suggestItemPrice } from '@/ai/flows/suggest-item-price-flow'; // Will be added later
+import { suggestItemPrice } from '@/ai/flows/suggest-item-price-flow';
 
 interface ItemFormProps {
   item?: InventoryItem; // For editing
@@ -30,7 +30,7 @@ export function ItemForm({ item }: ItemFormProps) {
   const { toast } = useToast();
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
   const [isSuggestingCategory, setIsSuggestingCategory] = useState(false);
-  const [isSuggestingPrice, setIsSuggestingPrice] = useState(false); // Added for price suggestion
+  const [isSuggestingPrice, setIsSuggestingPrice] = useState(false);
 
   const form = useForm<InventoryItemFormValues>({
     resolver: zodResolver(inventoryItemSchema),
@@ -106,35 +106,43 @@ export function ItemForm({ item }: ItemFormProps) {
     }
   };
 
-  // Placeholder for suggest price - will be implemented if user agrees to new features
-  // const handleSuggestPrice = async () => {
-  //   const itemName = form.getValues("name");
-  //   const itemDescription = form.getValues("description");
-  //   const itemCategory = form.getValues("category");
-  //   if (!itemName) {
-  //     toast({ title: "Nombre Requerido", description: "Por favor, introduce un nombre para el artículo.", variant: "destructive" });
-  //     return;
-  //   }
-  //   setIsSuggestingPrice(true);
-  //   try {
-  //     // const result = await suggestItemPrice({ itemName, itemDescription, itemCategory });
-  //     // form.setValue("price", result.suggestedPrice);
-  //     // toast({ title: "Precio Sugerido", description: `Se ha sugerido un precio: ${result.suggestedPrice}` });
-  //   } catch (error) {
-  //     console.error("Error suggesting price:", error);
-  //     toast({ title: "Error de IA", description: "No se pudo sugerir el precio.", variant: "destructive" });
-  //   } finally {
-  //     setIsSuggestingPrice(false);
-  //   }
-  // };
+  const handleSuggestPrice = async () => {
+    const itemName = form.getValues("name");
+    const itemDescription = form.getValues("description");
+    const itemCategory = form.getValues("category");
+
+    if (!itemName) {
+      toast({ title: "Nombre Requerido", description: "Por favor, introduce un nombre para el artículo antes de sugerir un precio.", variant: "destructive" });
+      return;
+    }
+    setIsSuggestingPrice(true);
+    try {
+      const result = await suggestItemPrice({ 
+        itemName, 
+        itemDescription: itemDescription || undefined,
+        itemCategory: itemCategory || undefined 
+      });
+      if (typeof result.suggestedPrice === 'number') {
+        form.setValue("price", parseFloat(result.suggestedPrice.toFixed(2)));
+        toast({ title: "Precio Sugerido", description: `Se ha sugerido un precio: $${result.suggestedPrice.toFixed(2)}` });
+      } else {
+        toast({ title: "Sugerencia No Disponible", description: "La IA no pudo determinar un precio.", variant: "default" });
+      }
+    } catch (error) {
+      console.error("Error suggesting price:", error);
+      toast({ title: "Error de IA", description: "No se pudo sugerir el precio.", variant: "destructive" });
+    } finally {
+      setIsSuggestingPrice(false);
+    }
+  };
 
   const onSubmit: SubmitHandler<InventoryItemFormValues> = (data) => {
     try {
       const submittedData = {
         ...data,
         quantity: Number(data.quantity),
-        price: data.price ? Number(data.price) : undefined,
-        lowStockThreshold: data.lowStockThreshold ? Number(data.lowStockThreshold) : undefined
+        price: data.price !== undefined && data.price !== '' ? Number(data.price) : undefined,
+        lowStockThreshold: data.lowStockThreshold !== undefined && data.lowStockThreshold !== '' ? Number(data.lowStockThreshold) : undefined
       };
 
       if (item) {
@@ -145,7 +153,7 @@ export function ItemForm({ item }: ItemFormProps) {
         toast({ title: "Artículo Añadido", description: `El artículo "${data.name}" ha sido añadido al inventario.` });
       }
       router.push('/inventario');
-      router.refresh();
+      router.refresh(); // Ensures data is fresh on the list page
     } catch (error) {
       console.error("Error saving item:", error);
       toast({ title: "Error", description: "No se pudo guardar el artículo.", variant: "destructive" });
@@ -224,20 +232,28 @@ export function ItemForm({ item }: ItemFormProps) {
                     <FormLabel>Precio (Opcional)</FormLabel>
                      <div className="relative">
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="Ej: 1200.50" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)} className="pl-7"/>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder="Ej: 1200.50" 
+                          {...field} 
+                          onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                          value={field.value === undefined ? '' : field.value}
+                          className="pl-7 pr-12"
+                        />
                       </FormControl>
                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                      {/* <Button 
+                      <Button 
                         type="button" 
                         variant="ghost" 
                         size="icon" 
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                        // onClick={handleSuggestPrice}
+                        onClick={handleSuggestPrice}
                         disabled={isSuggestingPrice || !form.watch("name")}
-                        title="Sugerir precio con IA (Próximamente)"
+                        title="Sugerir precio con IA"
                       >
                         <DollarSign className={`h-4 w-4 ${isSuggestingPrice ? 'animate-pulse' : ''}`} />
-                      </Button> */}
+                      </Button>
                     </div>
                     <FormMessage />
                   </FormItem>
@@ -278,7 +294,13 @@ export function ItemForm({ item }: ItemFormProps) {
                   <FormItem>
                     <FormLabel>Umbral Stock Bajo (Opc.)</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="Ej: 5" {...field} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10) || 0)} />
+                      <Input 
+                        type="number" 
+                        placeholder="Ej: 5" 
+                        {...field} 
+                        onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                        value={field.value === undefined ? '' : field.value}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
