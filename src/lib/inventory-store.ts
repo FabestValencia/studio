@@ -1,6 +1,9 @@
 
+"use client";
+
 import type { InventoryItem, InventoryItemFormValues, InventoryMovement, InventoryMovementType } from '@/types/inventory';
 import { useState, useEffect, useCallback } from 'react';
+import { useToast } from "@/hooks/use-toast";
 
 const INVENTORY_STORAGE_KEY = 'qmdInventoryAppItems';
 const INVENTORY_MOVEMENTS_STORAGE_KEY = 'qmdInventoryAppMovements';
@@ -49,6 +52,7 @@ export function useInventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     setItems(getStoredItems());
@@ -68,6 +72,22 @@ export function useInventory() {
     }
   }, [movements, isInitialized]);
 
+  const checkAndNotifyLowStock = useCallback((item: InventoryItem, oldQuantity?: number) => {
+    if (item.lowStockThreshold !== undefined && item.quantity < item.lowStockThreshold) {
+      // Notify if it just crossed the threshold or is a new item already low
+      const justCrossedThreshold = oldQuantity !== undefined && oldQuantity >= item.lowStockThreshold;
+      const isNewAndLow = oldQuantity === undefined; // For newly added items
+
+      if (justCrossedThreshold || isNewAndLow) {
+        toast({
+          title: "Alerta de Stock Bajo",
+          description: `El artículo "${item.name}" solo tiene ${item.quantity} unidades. (Umbral: ${item.lowStockThreshold})`,
+          variant: "default", // Could be 'destructive' or a new 'warning' variant if desired
+        });
+      }
+    }
+  }, [toast]);
+
   const addMovement = useCallback((
     itemId: string,
     itemName: string,
@@ -75,14 +95,14 @@ export function useInventory() {
     quantityChanged: number,
     reason: string
   ) => {
-    if (quantityChanged <= 0) return; // Do not log zero or negative quantity changes
+    if (quantityChanged <= 0) return;
 
     const newMovement: InventoryMovement = {
       id: crypto.randomUUID(),
       itemId,
       itemName,
       type,
-      quantityChanged: Math.abs(quantityChanged), // Ensure positive
+      quantityChanged: Math.abs(quantityChanged),
       reason,
       date: new Date().toISOString(),
     };
@@ -105,43 +125,49 @@ export function useInventory() {
     if (Number(itemData.quantity) > 0) {
       addMovement(newItem.id, newItem.name, 'entrada', Number(itemData.quantity), 'Alta inicial de artículo');
     }
+    checkAndNotifyLowStock(newItem); // Check for low stock on new item
     return newItem;
-  }, [addMovement]);
+  }, [addMovement, checkAndNotifyLowStock]);
 
   const updateItem = useCallback((id: string, updatedData: InventoryItemFormValues): InventoryItem | undefined => {
-    const itemToUpdate = items.find(item => item.id === id);
-    if (!itemToUpdate) {
-      console.warn(`Item with id ${id} not found for update.`);
-      return undefined;
+    let updatedItemObject: InventoryItem | undefined;
+    let oldQuantityValue: number | undefined;
+
+    setItems(prevItems => {
+      const itemToUpdate = prevItems.find(item => item.id === id);
+      if (!itemToUpdate) {
+        console.warn(`Item with id ${id} not found for update.`);
+        return prevItems;
+      }
+      oldQuantityValue = itemToUpdate.quantity; // Capture old quantity before update
+
+      updatedItemObject = {
+        ...itemToUpdate,
+        name: updatedData.name,
+        description: updatedData.description || '',
+        quantity: Number(updatedData.quantity),
+        price: updatedData.price ? Number(updatedData.price) : undefined,
+        category: updatedData.category || '',
+        lastUpdated: new Date().toISOString(),
+        lowStockThreshold: updatedData.lowStockThreshold ? Number(updatedData.lowStockThreshold) : undefined,
+      };
+
+      return prevItems.map(item => (item.id === id ? updatedItemObject! : item));
+    });
+
+    if (updatedItemObject && oldQuantityValue !== undefined) {
+      const newQuantityValue = updatedItemObject.quantity;
+      const quantityDifference = newQuantityValue - oldQuantityValue;
+
+      if (quantityDifference > 0) {
+        addMovement(updatedItemObject.id, updatedItemObject.name, 'entrada', quantityDifference, 'Compra de producto');
+      } else if (quantityDifference < 0) {
+        addMovement(updatedItemObject.id, updatedItemObject.name, 'salida', Math.abs(quantityDifference), 'Venta de producto');
+      }
+      checkAndNotifyLowStock(updatedItemObject, oldQuantityValue);
     }
-
-    const oldQuantityValue = itemToUpdate.quantity;
-    const newQuantityValue = Number(updatedData.quantity);
-
-    const updatedItemObject: InventoryItem = {
-      ...itemToUpdate,
-      name: updatedData.name,
-      description: updatedData.description || '',
-      quantity: newQuantityValue,
-      price: updatedData.price ? Number(updatedData.price) : undefined,
-      category: updatedData.category || '',
-      lastUpdated: new Date().toISOString(),
-      lowStockThreshold: updatedData.lowStockThreshold ? Number(updatedData.lowStockThreshold) : undefined,
-    };
-
-    setItems(prevItems => prevItems.map(item => (item.id === id ? updatedItemObject : item)));
-
-    const quantityDifference = newQuantityValue - oldQuantityValue;
-
-    if (quantityDifference > 0) {
-      addMovement(updatedItemObject.id, updatedItemObject.name, 'entrada', quantityDifference, 'Compra de producto');
-    } else if (quantityDifference < 0) {
-      addMovement(updatedItemObject.id, updatedItemObject.name, 'salida', Math.abs(quantityDifference), 'Venta de producto');
-    }
-    // If quantityDifference is 0, no movement is logged, which is correct.
-
     return updatedItemObject;
-  }, [items, addMovement]);
+  }, [addMovement, checkAndNotifyLowStock]);
 
   const deleteItem = useCallback((id: string) => {
     setItems((prevItems) => prevItems.filter((item) => item.id !== id));
@@ -158,39 +184,57 @@ export function useInventory() {
   }, [movements, isInitialized]);
 
   const incrementItemQuantity = useCallback((id: string, amount: number = 1, reason: string = 'Ajuste manual (incremento)') => {
-    const itemToUpdate = items.find(item => item.id === id);
-    if (!itemToUpdate) {
-      console.warn(`Item with id ${id} not found for increment.`);
-      return;
-    }
-    if (amount <= 0) return; // Can only increment by a positive amount
+    let updatedItemObject: InventoryItem | undefined;
+    let oldQuantityValue: number | undefined;
 
-    const newQuantity = itemToUpdate.quantity + amount;
-    const updatedItemObject = { ...itemToUpdate, quantity: newQuantity, lastUpdated: new Date().toISOString() };
+    setItems(prevItems => {
+        const itemToUpdate = prevItems.find(item => item.id === id);
+        if (!itemToUpdate) {
+          console.warn(`Item with id ${id} not found for increment.`);
+          return prevItems;
+        }
+        if (amount <= 0) return prevItems;
+        oldQuantityValue = itemToUpdate.quantity;
+        const newQuantity = itemToUpdate.quantity + amount;
+        updatedItemObject = { ...itemToUpdate, quantity: newQuantity, lastUpdated: new Date().toISOString() };
+        return prevItems.map(item => (item.id === id ? updatedItemObject! : item));
+    });
     
-    setItems(prevItems => prevItems.map(item => (item.id === id ? updatedItemObject : item)));
-    
-    addMovement(id, updatedItemObject.name, 'entrada', amount, reason);
-  }, [items, addMovement]);
+    if (updatedItemObject && oldQuantityValue !== undefined) {
+        addMovement(id, updatedItemObject.name, 'entrada', amount, reason);
+        checkAndNotifyLowStock(updatedItemObject, oldQuantityValue);
+    }
+  }, [addMovement, checkAndNotifyLowStock]);
 
   const decrementItemQuantity = useCallback((id: string, amount: number = 1, reason: string = 'Ajuste manual (decremento)') => {
-    const itemToUpdate = items.find(item => item.id === id);
-    if (!itemToUpdate) {
-      console.warn(`Item with id ${id} not found for decrement.`);
-      return;
+    let updatedItemObject: InventoryItem | undefined;
+    let oldQuantityValue: number | undefined;
+
+    setItems(prevItems => {
+        const itemToUpdate = prevItems.find(item => item.id === id);
+        if (!itemToUpdate) {
+          console.warn(`Item with id ${id} not found for decrement.`);
+          return prevItems;
+        }
+        if (amount <= 0) return prevItems;
+        
+        oldQuantityValue = itemToUpdate.quantity;
+        const actualAmountToDecrement = Math.min(amount, itemToUpdate.quantity); 
+        if (actualAmountToDecrement <= 0) return prevItems;
+
+        const newQuantity = itemToUpdate.quantity - actualAmountToDecrement;
+        updatedItemObject = { ...itemToUpdate, quantity: newQuantity, lastUpdated: new Date().toISOString() };
+        return prevItems.map(item => (item.id === id ? updatedItemObject! : item));
+    });
+
+    if (updatedItemObject && oldQuantityValue !== undefined) {
+        const actualAmountToDecrement = oldQuantityValue - updatedItemObject.quantity;
+         if (actualAmountToDecrement > 0) {
+            addMovement(id, updatedItemObject.name, 'salida', actualAmountToDecrement, reason);
+            checkAndNotifyLowStock(updatedItemObject, oldQuantityValue);
+        }
     }
-    if (amount <= 0) return; // Can only decrement by a positive amount
-    
-    const actualAmountToDecrement = Math.min(amount, itemToUpdate.quantity); 
-    if (actualAmountToDecrement <= 0) return; 
-
-    const newQuantity = itemToUpdate.quantity - actualAmountToDecrement;
-    const updatedItemObject = { ...itemToUpdate, quantity: newQuantity, lastUpdated: new Date().toISOString() };
-
-    setItems(prevItems => prevItems.map(item => (item.id === id ? updatedItemObject : item)));
-
-    addMovement(id, updatedItemObject.name, 'salida', actualAmountToDecrement, reason);
-  }, [items, addMovement]);
+  }, [addMovement, checkAndNotifyLowStock]);
 
   return {
     items: isInitialized ? items : [],
@@ -205,3 +249,5 @@ export function useInventory() {
     decrementItemQuantity, 
   };
 }
+
+    
