@@ -3,11 +3,14 @@
 
 import { useInventory } from '@/lib/inventory-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, Boxes, TrendingUp, TrendingDown, DollarSign, LayoutGrid } from 'lucide-react';
+import { Package, Boxes, TrendingUp, TrendingDown, DollarSign, LayoutGrid, BarChart3 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { InventoryItem } from '@/types/inventory';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+
 
 interface CategorySummary {
   categoryName: string;
@@ -53,6 +56,22 @@ export function DashboardClient() {
     })).sort((a,b) => a.categoryName.localeCompare(b.categoryName));
   }, [items]);
 
+  const top5MostStockedItems = useMemo(() => {
+    if (!items.length) return [];
+    return [...items]
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5)
+      .map(item => ({ name: item.name, quantity: item.quantity }))
+      .reverse(); // Reverse for vertical bar chart to show largest at top
+  }, [items]);
+
+  const chartConfig = {
+    quantity: {
+      label: "Cantidad",
+      color: "hsl(var(--chart-1))",
+    },
+  };
+
 
   if (!isInitialized) {
     return (
@@ -79,6 +98,14 @@ export function DashboardClient() {
             <Skeleton className="h-10 w-full mb-2" />
             <Skeleton className="h-10 w-full mb-2" />
             <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+             <Skeleton className="h-7 w-1/2" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-[250px] w-full" />
           </CardContent>
         </Card>
       </div>
@@ -182,7 +209,48 @@ export function DashboardClient() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <BarChart3 className="h-5 w-5 mr-2 text-muted-foreground" />
+            Top 5 Artículos Más Stockeados
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {top5MostStockedItems.length > 0 ? (
+            <ChartContainer config={chartConfig} className="min-h-[250px] w-full sm:min-h-[300px] md:min-h-[350px]">
+              <BarChart
+                accessibilityLayer
+                data={top5MostStockedItems}
+                layout="vertical"
+                margin={{ left: 10, right: 10, top:5, bottom: 5 }}
+              >
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                <XAxis type="number" dataKey="quantity" allowDecimals={false} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  width={100} 
+                  tickFormatter={(value) => value.length > 15 ? `${value.substring(0,15)}...` : value}
+                />
+                <ChartTooltip
+                  cursor={{ fill: "hsl(var(--muted))", radius: 4 }}
+                  content={<ChartTooltipContent indicator="dot" />}
+                />
+                <Bar dataKey="quantity" fill="var(--color-quantity)" radius={4} barSize={20}/>
+              </BarChart>
+            </ChartContainer>
+          ) : (
+             <p className="text-sm text-muted-foreground">No hay suficientes datos de artículos para mostrar el gráfico.</p>
+          )}
+        </CardContent>
+      </Card>
+
     </div>
   );
 }
-
