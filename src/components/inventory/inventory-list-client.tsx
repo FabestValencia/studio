@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useInventory } from '@/lib/inventory-store';
 import type { InventoryItem } from '@/types/inventory';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
-import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus, AlertTriangleIcon, Download } from 'lucide-react';
+import { Edit3, Trash2, MoreHorizontal, Search, ArrowUpDown, Filter, PackagePlus, AlertTriangleIcon, Download, X } from 'lucide-react';
 import { DeleteItemDialog } from './delete-item-dialog';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -29,19 +29,30 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 type SortKey = keyof InventoryItem | 'price' | '';
 type SortDirection = 'asc' | 'desc';
 
-const ALL_CATEGORIES_VALUE = "all_qmd_categories_filter_value";
+const ALL_CATEGORIES_VALUE = "all";
 
 export function InventoryListClient() {
   const { items, deleteItem, isInitialized } = useInventory();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES_VALUE);
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [isLowStockFilterActive, setIsLowStockFilterActive] = useState(false);
 
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
+
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    if (statusParam === 'low_stock') {
+      setIsLowStockFilterActive(true);
+    } else {
+      setIsLowStockFilterActive(false);
+    }
+  }, [searchParams]);
 
   const uniqueCategories = useMemo(() => {
     if (!isInitialized) return [];
@@ -52,6 +63,12 @@ export function InventoryListClient() {
   const filteredAndSortedItems = useMemo(() => {
     if (!isInitialized) return [];
     let processedItems = [...items];
+
+    if (isLowStockFilterActive) {
+      processedItems = processedItems.filter(item => 
+        typeof item.lowStockThreshold === 'number' && item.quantity < item.lowStockThreshold
+      );
+    }
 
     if (searchTerm) {
       processedItems = processedItems.filter(item =>
@@ -70,7 +87,6 @@ export function InventoryListClient() {
         let valA = a[sortKey as keyof InventoryItem];
         let valB = b[sortKey as keyof InventoryItem];
 
-        // Handle undefined price for sorting
         if (sortKey === 'price') {
             valA = a.price === undefined ? (sortDirection === 'asc' ? Infinity : -Infinity) : a.price;
             valB = b.price === undefined ? (sortDirection === 'asc' ? Infinity : -Infinity) : b.price;
@@ -95,7 +111,7 @@ export function InventoryListClient() {
       });
     }
     return processedItems;
-  }, [items, searchTerm, categoryFilter, sortKey, sortDirection, isInitialized]);
+  }, [items, searchTerm, categoryFilter, sortKey, sortDirection, isInitialized, isLowStockFilterActive]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -118,6 +134,11 @@ export function InventoryListClient() {
     }
   };
 
+  const handleClearLowStockFilter = () => {
+    setIsLowStockFilterActive(false);
+    router.replace('/inventario', { scroll: false });
+  };
+
   const handleExportToCSV = () => {
     if (filteredAndSortedItems.length === 0) {
       toast({ title: "No hay datos para exportar", variant: "destructive" });
@@ -133,7 +154,7 @@ export function InventoryListClient() {
     filteredAndSortedItems.forEach(item => {
       const row = [
         item.id,
-        `"${item.name.replace(/"/g, '""')}"`, // Escape double quotes
+        `"${item.name.replace(/"/g, '""')}"`, 
         `"${(item.description || '').replace(/"/g, '""')}"`,
         item.quantity,
         item.price !== undefined ? item.price.toFixed(2) : '',
@@ -207,14 +228,16 @@ export function InventoryListClient() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 w-full"
+              disabled={isLowStockFilterActive}
             />
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <Select 
               value={categoryFilter} 
               onValueChange={(value) => setCategoryFilter(value)}
+              disabled={isLowStockFilterActive}
             >
-              <SelectTrigger className="w-full sm:w-[240px]"> {/* Increased width from sm:w-[180px] */}
+              <SelectTrigger className="w-full sm:w-[240px]">
                 <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Filtrar por categoría" />
               </SelectTrigger>
@@ -241,12 +264,27 @@ export function InventoryListClient() {
           </div>
         </div>
 
-        {filteredAndSortedItems.length === 0 && (searchTerm || (categoryFilter && categoryFilter !== ALL_CATEGORIES_VALUE)) && (
+        {isLowStockFilterActive && (
+          <div className="mb-4 p-3 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-md flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertTriangleIcon className="h-5 w-5 mr-2 text-yellow-600 dark:text-yellow-400" />
+              <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                Mostrando artículos con stock bajo.
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleClearLowStockFilter} className="text-yellow-700 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-800/50">
+              <X className="h-4 w-4 mr-1" />
+              Limpiar filtro
+            </Button>
+          </div>
+        )}
+
+        {filteredAndSortedItems.length === 0 && (searchTerm || categoryFilter !== ALL_CATEGORIES_VALUE || isLowStockFilterActive) && (
            <div className="text-center py-10 text-muted-foreground">
              <p>No se encontraron artículos que coincidan con tu búsqueda o filtro.</p>
            </div>
         )}
-        {filteredAndSortedItems.length === 0 && !searchTerm && (!categoryFilter || categoryFilter === ALL_CATEGORIES_VALUE) && (
+        {filteredAndSortedItems.length === 0 && !searchTerm && categoryFilter === ALL_CATEGORIES_VALUE && !isLowStockFilterActive && (
            <div className="text-center py-10">
              <h3 className="text-xl font-semibold mb-2">Inventario Vacío</h3>
              <p className="text-muted-foreground mb-4">Aún no has añadido ningún artículo. ¡Empieza añadiendo uno!</p>
@@ -353,7 +391,3 @@ export function InventoryListClient() {
     </Card>
   );
 }
-
-    
-
-    

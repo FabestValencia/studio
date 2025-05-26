@@ -3,13 +3,14 @@
 
 import { useInventory } from '@/lib/inventory-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, Boxes, TrendingUp, TrendingDown, DollarSign, LayoutGrid, BarChart3 } from 'lucide-react';
+import { Package, Boxes, TrendingUp, TrendingDown, DollarSign, LayoutGrid, BarChart3, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { InventoryItem } from '@/types/inventory';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import Link from 'next/link';
 
 
 interface CategorySummary {
@@ -145,16 +146,18 @@ export function DashboardClient() {
             <p className="text-xs text-muted-foreground">Suma de (cantidad x precio)</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Artículos con Stock Bajo</CardTitle>
-            <TrendingDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{lowStockItemsCount}</div>
-            <p className="text-xs text-muted-foreground">Artículos por debajo de su umbral</p>
-          </CardContent>
-        </Card>
+        <Link href="/inventario?status=low_stock" className="group">
+          <Card className="hover:bg-muted/50 transition-colors">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Artículos con Stock Bajo</CardTitle>
+              <TrendingDown className="h-4 w-4 text-muted-foreground group-hover:text-destructive transition-colors" />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${lowStockItemsCount > 0 ? 'text-destructive' : ''}`}>{lowStockItemsCount}</div>
+              <p className="text-xs text-muted-foreground">Artículos por debajo de su umbral</p>
+            </CardContent>
+          </Card>
+        </Link>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Más Stockeado</CardTitle>
