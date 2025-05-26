@@ -9,3 +9,9 @@ export const inventoryItemSchema = z.object({
   category: z.string().max(50, { message: "La categoría no puede exceder los 50 caracteres." }).optional().or(z.literal('')),
   lowStockThreshold: z.coerce.number().int({ message: "El umbral debe ser un número entero." }).min(0, { message: "El umbral no puede ser negativo." }).optional(),
 });
+
+export const stockOutputSchema = z.object({
+  itemId: z.string().min(1, { message: "Debe seleccionar un artículo." }),
+  quantity: z.coerce.number().int({ message: "La cantidad debe ser un número entero." }).positive({ message: "La cantidad debe ser mayor que cero." }),
+  reason: z.string().min(1, { message: "La razón es obligatoria." }).max(100, { message: "La razón no puede exceder los 100 caracteres." }),
+});

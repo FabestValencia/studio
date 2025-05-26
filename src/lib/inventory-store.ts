@@ -45,14 +45,14 @@ export function useInventory() {
 
   const checkAndNotifyLowStock = useCallback((item: InventoryItem, oldQuantity?: number) => {
     if (item.lowStockThreshold !== undefined && item.quantity < item.lowStockThreshold) {
-      const justCrossedThreshold = oldQuantity !== undefined && oldQuantity >= item.lowStockThreshold;
-      const isNewAndLow = oldQuantity === undefined; // Item is new and already below threshold
+      const justCrossedThreshold = oldQuantity !== undefined && oldQuantity >= item.lowStockThreshold && item.quantity < item.lowStockThreshold;
+      const isNewAndLow = oldQuantity === undefined && item.quantity < item.lowStockThreshold; 
 
       if (justCrossedThreshold || isNewAndLow) {
         toast({
           title: "Alerta de Stock Bajo",
           description: `El artículo "${item.name}" solo tiene ${item.quantity} unidades. (Umbral: ${item.lowStockThreshold})`,
-          variant: "default",
+          variant: "default", 
         });
       }
     }
@@ -67,7 +67,7 @@ export function useInventory() {
   ) => {
     if (quantityChanged <= 0) return;
     const newMovement: InventoryMovement = {
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 9), // Simpler unique ID for localStorage
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9), 
       itemId,
       itemName,
       type,
@@ -101,49 +101,42 @@ export function useInventory() {
   }, [addMovement, checkAndNotifyLowStock]);
 
   const updateItem = useCallback((id: string, updatedData: InventoryItemFormValues): InventoryItem | undefined => {
-    let updatedItemResult: InventoryItem | undefined = undefined;
-    let oldQuantityValue: number | undefined = undefined;
-
-    setItems(prevItems => {
-      const itemIndex = prevItems.findIndex(item => item.id === id);
-      if (itemIndex === -1) {
-        toast({ title: "Error de Actualización", description: `Artículo con ID ${id} no encontrado.`, variant: "destructive" });
-        return prevItems;
-      }
-      
-      const itemToUpdate = prevItems[itemIndex];
-      oldQuantityValue = itemToUpdate.quantity;
-
-      updatedItemResult = {
-        ...itemToUpdate,
-        name: updatedData.name,
-        description: updatedData.description || '',
-        quantity: Number(updatedData.quantity),
-        price: updatedData.price !== undefined && updatedData.price !== '' ? Number(updatedData.price) : undefined,
-        category: updatedData.category || '',
-        lastUpdated: new Date().toISOString(),
-        lowStockThreshold: updatedData.lowStockThreshold !== undefined && updatedData.lowStockThreshold !== '' ? Number(updatedData.lowStockThreshold) : undefined,
-      };
-
-      const newItems = [...prevItems];
-      newItems[itemIndex] = updatedItemResult;
-      return newItems.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
-    });
-
-    if (updatedItemResult && oldQuantityValue !== undefined) {
-      const currentItem = updatedItemResult; // Use the state from after setItems has scheduled its update
-      const newQuantityValue = currentItem.quantity;
-      const quantityDifference = newQuantityValue - oldQuantityValue;
-
-      if (quantityDifference > 0) {
-        addMovement(id, currentItem.name, 'entrada', quantityDifference, 'Compra de producto');
-      } else if (quantityDifference < 0) {
-        addMovement(id, currentItem.name, 'salida', Math.abs(quantityDifference), 'Venta de producto');
-      }
-      checkAndNotifyLowStock(currentItem, oldQuantityValue);
+    const itemToUpdate = items.find(item => item.id === id);
+    if (!itemToUpdate) {
+      toast({ title: "Error de Actualización", description: `Artículo con ID ${id} no encontrado.`, variant: "destructive" });
+      return undefined;
     }
-    return updatedItemResult;
-  }, [addMovement, checkAndNotifyLowStock, toast]);
+
+    const oldQuantityValue = itemToUpdate.quantity;
+
+    const updatedItem: InventoryItem = {
+      ...itemToUpdate,
+      name: updatedData.name,
+      description: updatedData.description || '',
+      quantity: Number(updatedData.quantity),
+      price: updatedData.price !== undefined && updatedData.price !== '' ? Number(updatedData.price) : undefined,
+      category: updatedData.category || '',
+      lastUpdated: new Date().toISOString(),
+      lowStockThreshold: updatedData.lowStockThreshold !== undefined && updatedData.lowStockThreshold !== '' ? Number(updatedData.lowStockThreshold) : undefined,
+    };
+    
+    setItems(prevItems => 
+      prevItems.map(item => (item.id === id ? updatedItem : item))
+               .sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
+    );
+
+    const newQuantityValue = updatedItem.quantity;
+    const quantityDifference = newQuantityValue - oldQuantityValue;
+
+    if (quantityDifference > 0) {
+      addMovement(id, updatedItem.name, 'entrada', quantityDifference, 'Compra de producto');
+    } else if (quantityDifference < 0) {
+      addMovement(id, updatedItem.name, 'salida', Math.abs(quantityDifference), 'Venta de producto');
+    }
+    
+    checkAndNotifyLowStock(updatedItem, oldQuantityValue);
+    return updatedItem;
+  }, [items, addMovement, checkAndNotifyLowStock, toast]);
 
 
   const deleteItem = useCallback((id: string) => {
@@ -161,6 +154,39 @@ export function useInventory() {
                     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [movements, isInitialized]);
 
+  const recordStockOutput = useCallback((itemId: string, quantityToOutput: number, reason: string): boolean => {
+    const itemToUpdate = items.find(item => item.id === itemId);
+
+    if (!itemToUpdate) {
+      toast({ title: "Error", description: "Artículo no encontrado.", variant: "destructive" });
+      return false;
+    }
+
+    if (itemToUpdate.quantity < quantityToOutput) {
+      toast({ title: "Error de Stock", description: `No hay suficiente stock de "${itemToUpdate.name}". Disponible: ${itemToUpdate.quantity}.`, variant: "destructive" });
+      return false;
+    }
+
+    const oldQuantity = itemToUpdate.quantity;
+    const updatedItem: InventoryItem = {
+      ...itemToUpdate,
+      quantity: itemToUpdate.quantity - quantityToOutput,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    setItems(prevItems =>
+      prevItems.map(item => (item.id === itemId ? updatedItem : item))
+               .sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
+    );
+
+    addMovement(itemId, updatedItem.name, 'salida', quantityToOutput, reason);
+    checkAndNotifyLowStock(updatedItem, oldQuantity);
+    
+    toast({ title: "Salida Registrada", description: `Se retiraron ${quantityToOutput} unidades de "${updatedItem.name}".` });
+    return true;
+  }, [items, addMovement, checkAndNotifyLowStock, toast]);
+
+
   return {
     items,
     movements,
@@ -170,5 +196,6 @@ export function useInventory() {
     deleteItem,
     getItemById,
     getMovementsByItemId,
+    recordStockOutput,
   };
 }

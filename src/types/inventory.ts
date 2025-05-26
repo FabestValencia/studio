@@ -31,3 +31,9 @@ export type InventoryItemFormValues = {
   category?: string;
   lowStockThreshold?: number | string; // string from form, number in actual data
 };
+
+export type StockOutputFormValues = {
+  itemId: string;
+  quantity: number | string;
+  reason: string;
+};

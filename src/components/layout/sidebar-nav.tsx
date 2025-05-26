@@ -4,13 +4,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
-import { List, PackagePlus, LayoutDashboard, History } from 'lucide-react';
+import { List, PackagePlus, LayoutDashboard, History, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/inventario', label: 'Inventario', icon: List },
   { href: '/inventario/nuevo', label: 'Añadir Artículo', icon: PackagePlus },
+  { href: '/inventario/salida', label: 'Registrar Salida', icon: LogOut },
   { href: '/movimientos', label: 'Movimientos', icon: History },
 ];
 
@@ -22,16 +23,13 @@ export function SidebarNav() {
       {navItems.map((item) => {
         let itemIsActive = false;
 
-        if (item.href === '/dashboard') {
+        // Exact match for dashboard, movements, add item, and stock output
+        if (['/dashboard', '/movimientos', '/inventario/nuevo', '/inventario/salida'].includes(item.href)) {
           itemIsActive = pathname === item.href;
-        } else if (item.href === '/inventario') {
-          // Active if it's the main inventory page or an edit page
+        } 
+        // Special handling for inventory list and edit pages
+        else if (item.href === '/inventario') {
           itemIsActive = pathname === item.href || pathname.startsWith('/inventario/editar/');
-        } else if (item.href === '/inventario/nuevo') {
-          itemIsActive = pathname === item.href;
-        } else {
-          // For other items like /movimientos
-          itemIsActive = pathname === item.href;
         }
         
 
