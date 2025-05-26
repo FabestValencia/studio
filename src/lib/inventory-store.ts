@@ -101,12 +101,13 @@ export function useInventory() {
   }, [addMovement, checkAndNotifyLowStock]);
 
   const updateItem = useCallback((id: string, updatedData: InventoryItemFormValues): InventoryItem | undefined => {
-    const itemToUpdate = items.find(item => item.id === id);
-    if (!itemToUpdate) {
-      toast({ title: "Error de Actualización", description: `Artículo con ID ${id} no encontrado.`, variant: "destructive" });
-      return undefined;
+    const itemIndex = items.findIndex(item => item.id === id);
+    if (itemIndex === -1) {
+        toast({ title: "Error de Actualización", description: `Artículo con ID ${id} no encontrado.`, variant: "destructive" });
+        return undefined;
     }
 
+    const itemToUpdate = items[itemIndex];
     const oldQuantityValue = itemToUpdate.quantity;
 
     const updatedItem: InventoryItem = {
@@ -120,10 +121,11 @@ export function useInventory() {
       lowStockThreshold: updatedData.lowStockThreshold !== undefined && updatedData.lowStockThreshold !== '' ? Number(updatedData.lowStockThreshold) : undefined,
     };
     
-    setItems(prevItems => 
-      prevItems.map(item => (item.id === id ? updatedItem : item))
-               .sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
-    );
+    setItems(prevItems => {
+      const newItems = [...prevItems];
+      newItems[itemIndex] = updatedItem;
+      return newItems.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
+    });
 
     const newQuantityValue = updatedItem.quantity;
     const quantityDifference = newQuantityValue - oldQuantityValue;
@@ -186,6 +188,36 @@ export function useInventory() {
     return true;
   }, [items, addMovement, checkAndNotifyLowStock, toast]);
 
+  const recordStockInput = useCallback((itemId: string, quantityToAdd: number, reason: string): boolean => {
+    const itemToUpdate = items.find(item => item.id === itemId);
+
+    if (!itemToUpdate) {
+      toast({ title: "Error", description: "Artículo no encontrado.", variant: "destructive" });
+      return false;
+    }
+
+    const oldQuantity = itemToUpdate.quantity;
+    const updatedItem: InventoryItem = {
+      ...itemToUpdate,
+      quantity: itemToUpdate.quantity + quantityToAdd,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    setItems(prevItems =>
+      prevItems.map(item => (item.id === itemId ? updatedItem : item))
+               .sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime())
+    );
+
+    addMovement(itemId, updatedItem.name, 'entrada', quantityToAdd, reason);
+    // For stock input, we don't typically check for low stock immediately,
+    // but we might want to clear a previous low stock warning if applicable,
+    // however, checkAndNotifyLowStock only notifies if it *is* low.
+    checkAndNotifyLowStock(updatedItem, oldQuantity); 
+    
+    toast({ title: "Entrada Registrada", description: `Se añadieron ${quantityToAdd} unidades a "${updatedItem.name}".` });
+    return true;
+  }, [items, addMovement, checkAndNotifyLowStock, toast]);
+
 
   return {
     items,
@@ -197,5 +229,6 @@ export function useInventory() {
     getItemById,
     getMovementsByItemId,
     recordStockOutput,
+    recordStockInput,
   };
 }

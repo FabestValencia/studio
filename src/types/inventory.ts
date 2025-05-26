@@ -37,3 +37,9 @@ export type StockOutputFormValues = {
   quantity: number | string;
   reason: string;
 };
+
+export type StockInputFormValues = {
+  itemId: string;
+  quantity: number | string;
+  reason: string;
+};

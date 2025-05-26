@@ -15,3 +15,9 @@ export const stockOutputSchema = z.object({
   quantity: z.coerce.number().int({ message: "La cantidad debe ser un número entero." }).positive({ message: "La cantidad debe ser mayor que cero." }),
   reason: z.string().min(1, { message: "La razón es obligatoria." }).max(100, { message: "La razón no puede exceder los 100 caracteres." }),
 });
+
+export const stockInputSchema = z.object({
+  itemId: z.string().min(1, { message: "Debe seleccionar un artículo." }),
+  quantity: z.coerce.number().int({ message: "La cantidad debe ser un número entero." }).positive({ message: "La cantidad debe ser mayor que cero." }),
+  reason: z.string().min(1, { message: "La razón es obligatoria." }).max(100, { message: "La razón no puede exceder los 100 caracteres." }),
+});
