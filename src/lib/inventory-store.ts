@@ -4,49 +4,33 @@
 import type { InventoryItem, InventoryItemFormValues, InventoryMovement, InventoryMovementType } from '@/types/inventory';
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from "@/hooks/use-toast";
+import { db } from './firebase'; // Import Firestore instance
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  where,
+  writeBatch,
+  serverTimestamp,
+  Timestamp
+} from 'firebase/firestore';
 
-const INVENTORY_STORAGE_KEY = 'qmdInventoryAppItems';
-const INVENTORY_MOVEMENTS_STORAGE_KEY = 'qmdInventoryAppMovements';
-
-const getStoredItems = (): InventoryItem[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(INVENTORY_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-    console.error("Error parsing inventory from localStorage:", error);
-    return [];
+// Helper to convert Firestore Timestamps to ISO strings
+const convertTimestampsToISO = (data: any): any => {
+  const result: any = { ...data };
+  for (const key in result) {
+    if (result[key] instanceof Timestamp) {
+      result[key] = result[key].toDate().toISOString();
+    }
   }
+  return result;
 };
 
-const setStoredItems = (items: InventoryItem[]) => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(items));
-  } catch (error) {
-    console.error("Error saving inventory to localStorage:", error);
-  }
-};
-
-const getStoredMovements = (): InventoryMovement[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(INVENTORY_MOVEMENTS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-    console.error("Error parsing movements from localStorage:", error);
-    return [];
-  }
-};
-
-const setStoredMovements = (movements: InventoryMovement[]) => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(INVENTORY_MOVEMENTS_STORAGE_KEY, JSON.stringify(movements));
-  } catch (error) {
-    console.error("Error saving movements to localStorage:", error);
-  }
-};
 
 export function useInventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -54,41 +38,64 @@ export function useInventory() {
   const [isInitialized, setIsInitialized] = useState(false);
   const { toast } = useToast();
 
+  // Subscribe to items collection
   useEffect(() => {
-    setItems(getStoredItems());
-    setMovements(getStoredMovements());
-    setIsInitialized(true);
-  }, []);
+    const itemsCollectionRef = collection(db, 'inventoryItems');
+    const q = query(itemsCollectionRef, orderBy('dateAdded', 'desc'));
 
-  useEffect(() => {
-    if (isInitialized) {
-      setStoredItems(items);
-    }
-  }, [items, isInitialized]);
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const fetchedItems: InventoryItem[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedItems.push({ ...convertTimestampsToISO(doc.data()), id: doc.id } as InventoryItem);
+      });
+      setItems(fetchedItems);
+      if (!isInitialized) setIsInitialized(true); // Set initialized after first successful fetch
+    }, (error) => {
+      console.error("Error fetching inventory items:", error);
+      toast({ title: "Error", description: "No se pudieron cargar los artículos del inventario.", variant: "destructive" });
+      if (!isInitialized) setIsInitialized(true); // Still set initialized on error to unblock UI
+    });
 
+    return () => unsubscribe();
+  }, [isInitialized, toast]);
+
+  // Subscribe to movements collection
   useEffect(() => {
-    if (isInitialized) {
-      setStoredMovements(movements);
-    }
-  }, [movements, isInitialized]);
+    const movementsCollectionRef = collection(db, 'inventoryMovements');
+    const q = query(movementsCollectionRef, orderBy('date', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const fetchedMovements: InventoryMovement[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedMovements.push({ ...convertTimestampsToISO(doc.data()), id: doc.id } as InventoryMovement);
+      });
+      setMovements(fetchedMovements);
+    }, (error) => {
+      console.error("Error fetching inventory movements:", error);
+      // toast({ title: "Error", description: "No se pudieron cargar los movimientos.", variant: "destructive" });
+      // Optional: Toast for movement errors, can be noisy
+    });
+
+    return () => unsubscribe();
+  }, [toast]);
+
 
   const checkAndNotifyLowStock = useCallback((item: InventoryItem, oldQuantity?: number) => {
     if (item.lowStockThreshold !== undefined && item.quantity < item.lowStockThreshold) {
-      // Notify if it just crossed the threshold or is a new item already low
       const justCrossedThreshold = oldQuantity !== undefined && oldQuantity >= item.lowStockThreshold;
-      const isNewAndLow = oldQuantity === undefined; // For newly added items
+      const isNewAndLow = oldQuantity === undefined;
 
       if (justCrossedThreshold || isNewAndLow) {
         toast({
           title: "Alerta de Stock Bajo",
           description: `El artículo "${item.name}" solo tiene ${item.quantity} unidades. (Umbral: ${item.lowStockThreshold})`,
-          variant: "default", // Could be 'destructive' or a new 'warning' variant if desired
+          variant: "default",
         });
       }
     }
   }, [toast]);
 
-  const addMovement = useCallback((
+  const addMovement = useCallback(async (
     itemId: string,
     itemName: string,
     type: InventoryMovementType,
@@ -97,157 +104,148 @@ export function useInventory() {
   ) => {
     if (quantityChanged <= 0) return;
 
-    const newMovement: InventoryMovement = {
-      id: crypto.randomUUID(),
+    const newMovementData = {
       itemId,
       itemName,
       type,
       quantityChanged: Math.abs(quantityChanged),
       reason,
-      date: new Date().toISOString(),
+      date: serverTimestamp(), // Use Firestore server timestamp
     };
-    setMovements((prevMovements) => [newMovement, ...prevMovements]);
-  }, []);
+    try {
+      const movementsCollectionRef = collection(db, 'inventoryMovements');
+      await addDoc(movementsCollectionRef, newMovementData);
+    } catch (error) {
+      console.error("Error adding movement to Firestore:", error);
+      toast({ title: "Error de Movimiento", description: "No se pudo registrar el movimiento.", variant: "destructive" });
+    }
+  }, [toast]);
 
-  const addItem = useCallback((itemData: InventoryItemFormValues): InventoryItem => {
-    const newItem: InventoryItem = {
-      id: crypto.randomUUID(),
+  const addItem = useCallback(async (itemData: InventoryItemFormValues): Promise<InventoryItem | undefined> => {
+    const newItemData = {
       name: itemData.name,
       description: itemData.description || '',
       quantity: Number(itemData.quantity),
-      price: itemData.price ? Number(itemData.price) : undefined,
+      price: itemData.price ? Number(itemData.price) : null, // Firestore handles undefined as null or field removal
       category: itemData.category || '',
-      dateAdded: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-      lowStockThreshold: itemData.lowStockThreshold ? Number(itemData.lowStockThreshold) : undefined,
+      dateAdded: serverTimestamp(),
+      lastUpdated: serverTimestamp(),
+      lowStockThreshold: itemData.lowStockThreshold ? Number(itemData.lowStockThreshold) : null,
     };
-    setItems((prevItems) => [...prevItems, newItem]);
-    if (Number(itemData.quantity) > 0) {
-      addMovement(newItem.id, newItem.name, 'entrada', Number(itemData.quantity), 'Alta inicial de artículo');
-    }
-    checkAndNotifyLowStock(newItem); // Check for low stock on new item
-    return newItem;
-  }, [addMovement, checkAndNotifyLowStock]);
 
-  const updateItem = useCallback((id: string, updatedData: InventoryItemFormValues): InventoryItem | undefined => {
-    let updatedItemObject: InventoryItem | undefined;
-    let oldQuantityValue: number | undefined;
-
-    setItems(prevItems => {
-      const itemToUpdate = prevItems.find(item => item.id === id);
-      if (!itemToUpdate) {
-        console.warn(`Item with id ${id} not found for update.`);
-        return prevItems;
-      }
-      oldQuantityValue = itemToUpdate.quantity; // Capture old quantity before update
-
-      updatedItemObject = {
-        ...itemToUpdate,
-        name: updatedData.name,
-        description: updatedData.description || '',
-        quantity: Number(updatedData.quantity),
-        price: updatedData.price ? Number(updatedData.price) : undefined,
-        category: updatedData.category || '',
-        lastUpdated: new Date().toISOString(),
-        lowStockThreshold: updatedData.lowStockThreshold ? Number(updatedData.lowStockThreshold) : undefined,
+    try {
+      const itemsCollectionRef = collection(db, 'inventoryItems');
+      const docRef = await addDoc(itemsCollectionRef, newItemData);
+      
+      const addedItem: InventoryItem = {
+        ...newItemData,
+        id: docRef.id,
+        dateAdded: new Date().toISOString(), // Approximate client date for immediate UI
+        lastUpdated: new Date().toISOString(), // Approximate client date for immediate UI
+        price: newItemData.price === null ? undefined : newItemData.price,
+        lowStockThreshold: newItemData.lowStockThreshold === null ? undefined : newItemData.lowStockThreshold,
       };
 
-      return prevItems.map(item => (item.id === id ? updatedItemObject! : item));
-    });
+      if (Number(itemData.quantity) > 0) {
+        await addMovement(addedItem.id, addedItem.name, 'entrada', Number(itemData.quantity), 'Alta inicial de artículo');
+      }
+      checkAndNotifyLowStock(addedItem);
+      return addedItem;
+    } catch (error) {
+      console.error("Error adding item to Firestore:", error);
+      toast({ title: "Error al Añadir", description: "No se pudo añadir el artículo.", variant: "destructive" });
+      return undefined;
+    }
+  }, [addMovement, checkAndNotifyLowStock, toast]);
 
-    if (updatedItemObject && oldQuantityValue !== undefined) {
-      const newQuantityValue = updatedItemObject.quantity;
+  const updateItem = useCallback(async (id: string, updatedData: InventoryItemFormValues): Promise<InventoryItem | undefined> => {
+    const itemToUpdate = items.find(item => item.id === id);
+    if (!itemToUpdate) {
+      console.warn(`Item with id ${id} not found for update.`);
+      toast({ title: "Error de Actualización", description: `Artículo con ID ${id} no encontrado.`, variant: "destructive" });
+      return undefined;
+    }
+
+    const oldQuantityValue = itemToUpdate.quantity;
+
+    const updatedItemPayload = {
+      name: updatedData.name,
+      description: updatedData.description || '',
+      quantity: Number(updatedData.quantity),
+      price: updatedData.price ? Number(updatedData.price) : null,
+      category: updatedData.category || '',
+      lastUpdated: serverTimestamp(),
+      lowStockThreshold: updatedData.lowStockThreshold ? Number(updatedData.lowStockThreshold) : null,
+    };
+
+    try {
+      const itemDocRef = doc(db, 'inventoryItems', id);
+      await updateDoc(itemDocRef, updatedItemPayload);
+
+      const updatedItemForUI: InventoryItem = {
+        ...itemToUpdate,
+        ...updatedItemPayload,
+        lastUpdated: new Date().toISOString(), // Approx for UI
+        price: updatedItemPayload.price === null ? undefined : updatedItemPayload.price,
+        lowStockThreshold: updatedItemPayload.lowStockThreshold === null ? undefined : updatedItemPayload.lowStockThreshold,
+      };
+      
+      const newQuantityValue = updatedItemForUI.quantity;
       const quantityDifference = newQuantityValue - oldQuantityValue;
 
       if (quantityDifference > 0) {
-        addMovement(updatedItemObject.id, updatedItemObject.name, 'entrada', quantityDifference, 'Compra de producto');
+        await addMovement(id, updatedItemForUI.name, 'entrada', quantityDifference, 'Compra de producto');
       } else if (quantityDifference < 0) {
-        addMovement(updatedItemObject.id, updatedItemObject.name, 'salida', Math.abs(quantityDifference), 'Venta de producto');
+        await addMovement(id, updatedItemForUI.name, 'salida', Math.abs(quantityDifference), 'Venta de producto');
       }
-      checkAndNotifyLowStock(updatedItemObject, oldQuantityValue);
+      checkAndNotifyLowStock(updatedItemForUI, oldQuantityValue);
+      return updatedItemForUI;
+    } catch (error) {
+      console.error("Error updating item in Firestore:", error);
+      toast({ title: "Error al Actualizar", description: "No se pudo actualizar el artículo.", variant: "destructive" });
+      return undefined;
     }
-    return updatedItemObject;
-  }, [addMovement, checkAndNotifyLowStock]);
+  }, [items, addMovement, checkAndNotifyLowStock, toast]);
 
-  const deleteItem = useCallback((id: string) => {
-    setItems((prevItems) => prevItems.filter((item) => item.id !== id));
-  }, []);
+  const deleteItem = useCallback(async (id: string) => {
+    // Note: This only deletes the item. Associated movements remain for historical record.
+    // You might want to implement a more complex delete (e.g., soft delete or cascading delete of movements)
+    // depending on requirements, which would also involve Firebase Functions for proper atomicity.
+    try {
+      const itemDocRef = doc(db, 'inventoryItems', id);
+      await deleteDoc(itemDocRef);
+      // UI update will happen via onSnapshot
+    } catch (error) {
+      console.error("Error deleting item from Firestore:", error);
+      toast({ title: "Error al Eliminar", description: "No se pudo eliminar el artículo.", variant: "destructive" });
+    }
+  }, [toast]);
 
   const getItemById = useCallback((id: string): InventoryItem | undefined => {
-    if (!isInitialized) return undefined;
+    if (!isInitialized) return undefined; // Or handle loading state appropriately in components
     return items.find((item) => item.id === id);
   }, [items, isInitialized]);
 
   const getMovementsByItemId = useCallback((itemId: string): InventoryMovement[] => {
     if (!isInitialized) return [];
-    return movements.filter(movement => movement.itemId === itemId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return movements.filter(movement => movement.itemId === itemId)
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [movements, isInitialized]);
 
-  const incrementItemQuantity = useCallback((id: string, amount: number = 1, reason: string = 'Ajuste manual (incremento)') => {
-    let updatedItemObject: InventoryItem | undefined;
-    let oldQuantityValue: number | undefined;
-
-    setItems(prevItems => {
-        const itemToUpdate = prevItems.find(item => item.id === id);
-        if (!itemToUpdate) {
-          console.warn(`Item with id ${id} not found for increment.`);
-          return prevItems;
-        }
-        if (amount <= 0) return prevItems;
-        oldQuantityValue = itemToUpdate.quantity;
-        const newQuantity = itemToUpdate.quantity + amount;
-        updatedItemObject = { ...itemToUpdate, quantity: newQuantity, lastUpdated: new Date().toISOString() };
-        return prevItems.map(item => (item.id === id ? updatedItemObject! : item));
-    });
-    
-    if (updatedItemObject && oldQuantityValue !== undefined) {
-        addMovement(id, updatedItemObject.name, 'entrada', amount, reason);
-        checkAndNotifyLowStock(updatedItemObject, oldQuantityValue);
-    }
-  }, [addMovement, checkAndNotifyLowStock]);
-
-  const decrementItemQuantity = useCallback((id: string, amount: number = 1, reason: string = 'Ajuste manual (decremento)') => {
-    let updatedItemObject: InventoryItem | undefined;
-    let oldQuantityValue: number | undefined;
-
-    setItems(prevItems => {
-        const itemToUpdate = prevItems.find(item => item.id === id);
-        if (!itemToUpdate) {
-          console.warn(`Item with id ${id} not found for decrement.`);
-          return prevItems;
-        }
-        if (amount <= 0) return prevItems;
-        
-        oldQuantityValue = itemToUpdate.quantity;
-        const actualAmountToDecrement = Math.min(amount, itemToUpdate.quantity); 
-        if (actualAmountToDecrement <= 0) return prevItems;
-
-        const newQuantity = itemToUpdate.quantity - actualAmountToDecrement;
-        updatedItemObject = { ...itemToUpdate, quantity: newQuantity, lastUpdated: new Date().toISOString() };
-        return prevItems.map(item => (item.id === id ? updatedItemObject! : item));
-    });
-
-    if (updatedItemObject && oldQuantityValue !== undefined) {
-        const actualAmountToDecrement = oldQuantityValue - updatedItemObject.quantity;
-         if (actualAmountToDecrement > 0) {
-            addMovement(id, updatedItemObject.name, 'salida', actualAmountToDecrement, reason);
-            checkAndNotifyLowStock(updatedItemObject, oldQuantityValue);
-        }
-    }
-  }, [addMovement, checkAndNotifyLowStock]);
+  // incrementItemQuantity and decrementItemQuantity would need to be adapted similarly
+  // using updateDoc and potentially Firestore transactions if atomicity is critical.
+  // For now, they are omitted as they are not directly used by the UI after previous changes.
+  // If re-enabled, they should call updateItem or directly manipulate Firestore docs.
 
   return {
-    items: isInitialized ? items : [],
-    movements: isInitialized ? movements : [],
+    items, // No longer conditional on isInitialized here, components should handle loading state based on isInitialized
+    movements,
     isInitialized,
     addItem,
     updateItem,
     deleteItem,
     getItemById,
     getMovementsByItemId,
-    incrementItemQuantity, 
-    decrementItemQuantity, 
+    // incrementItemQuantity and decrementItemQuantity would go here if re-implemented for Firestore
   };
 }
-
-    
